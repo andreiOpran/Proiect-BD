@@ -1,0 +1,247 @@
+--12.Formulați în  limbaj  natural și  implementați 5 cereri  SQL  complexece  vor  utiliza,  în ansamblul lor, următoarele elemente: 
+--•	subcereri sincronizate în care intervin cel puțin 3 tabele
+--•	subcereri nesincronizate în clauza FROM
+--•	grupări de date cu  subcereri  nesincronizate  in  care  intervin  cel  putin  3  tabele, funcții grup, filtrare la nivel de grupuri(in cadrul aceleiasi cereri)
+--•	ordonări si utilizarea funcțiilor NVL și DECODE (in cadrul aceleiasi cereri)
+--•	utilizarea a cel puțin 2 funcții pe șiruri de caractere, 2 funcții pe date calendaristice,  a cel puțin unei expresii CASE
+--•	utilizarea a cel puțin 1 bloc de cerere(clauza WITH)
+
+
+--1. Selectati utilizatorii nascuti in perioada (1988-1990) care contin in nume litera 'A', au cel putin o motocicleta inregistrata care are un motor pe 2 
+--timpi si au alocat o suma pentru intretinerile motocicletelor mai mare decat suma medie alocata de toti utilizatorii. 
+--Se vor afisa, numele si prenumele (intr-o singura col), suma si respectiv indicele tabelar (indicele tabelar pentru un utilizator este 0, daca acesta are 
+--suma cea mai mare dintre utilizatorii care respecta conditiile tabelului, 1, daca are suma egala cu media sumelor utilzatorilor si 2, altfel). Rezultatele 
+--vor fi afisate in ordinea descrescatoare a sumei alocate intretinerilor de catre un utilizator.
+
+--Rezolvare:
+WITH USERS AS ( --blocul WITH, o subcerere nesincronizata din clauza FROM
+    SELECT DISTINCT
+        U.ID_UTILIZATOR AS "ID_UTILIZATOR", CONCAT(CONCAT(U.NUME,' '), U.PRENUME) AS "NUMELE_INTREG", SUM(P.COST) AS "SUMA" --functia CONCAT, functia grup SUM 
+    FROM INTRETINERE I
+    JOIN UTILIZATOR U ON U.ID_UTILIZATOR=I.ID_UTILIZATOR
+    JOIN PLATA P ON P.ID_PLATA=I.ID_PLATA
+    WHERE UPPER(U.NUME) LIKE '%A%' --expresia "LIKE"
+    GROUP BY U.ID_UTILIZATOR, U.NUME, U.PRENUME --grupari de date in care intervin trei tabele
+    )
+SELECT
+    U.NUMELE_INTREG, U.SUMA, DECODE(U.SUMA, ( --functia DECODE
+        SELECT
+            MAX(U4.SUMA) --functia grup MAX()
+        FROM USERS U4 
+        ),0, (
+        SELECT
+            AVG(NVL(U5.SUMA,0)) --functia NVL, functia grup AVG()
+        FROM USERS U5
+        ), 1, 2) INDICE_TABELAR
+FROM USERS U
+WHERE U.SUMA>(
+    SELECT  --subcerere nesincronizata
+        AVG(NVL(U1.SUMA,0)) --functia grup AVG()
+    FROM USERS U1
+    ) AND 1<=(
+    SELECT
+        COUNT(*) --functia grup COUNT()
+    FROM MOTOCICLETA M
+    JOIN UTILIZATOR U2 ON U2.ID_UTILIZATOR=M.ID_UTILIZATOR
+    JOIN MOTOR MO ON MO.ID_MOTOR=M.ID_MOTOR
+    WHERE MO.NR_TIMPI=2 AND M.ID_UTILIZATOR=U.ID_UTILIZATOR AND TO_NUMBER(TO_CHAR(U2.DATA_NASTERII,'YYYY')) IN (1988, 1989, 1990) --functia TO_CHAR folosita pe o data calendaristica
+    ) ---cerere sincronizata in care intervin 3 tabele (MOTOCICLETA, UTILIZATOR, MOTOR) (se observa utilizarea valorii U.ID_UTILIZATOR in cadrul acesteia)
+ORDER BY U.SUMA DESC; --ordonarea dupa suma
+
+--Se respecta urmatoarele cerinte:
+
+--se utilizeaza a cel puțin 1 bloc de cerere (WITH)
+--utilizarea a cel puțin 2 funcții pe șiruri de caractere (CONCAT, UPPER), o funcție pe date calendaristice (TO_CHAR)
+--ordonarea (dupa suma) si utilizarea funcțiilor NVL și DECODE (in cadrul aceleiasi cereri)
+--o subcerere sincronizata în care intervin cel puțin 3 tabele
+--subcereri nesincronizate în clauza FROM (datorita subcererii din WITH)
+--grupări de date cu subcereri nesincronizate in care intervin cel putin 3 tabele, funcții grup (MAX, AVG, COUNT), filtrare la nivel de grupuri (in cadrul aceleiasi cereri)
+
+
+--2. Selectati primele 7 motociclete in functie de cel mai mic kilometraj si afisati marca, modelul, kilometrajul acestora si numarul de timpi al motorului 
+--acestora, reprezentat printr-o descriere scurta. 
+
+--Solutie:
+SELECT
+    *
+FROM( --subcerere nesincronizata in clauza FROM
+    SELECT 
+        M.MARCA, M.MODEL, M.KILOMETRAJ, 
+        (SELECT
+            (CASE
+                WHEN MO.NR_TIMPI = 2 THEN 'Motocicleta are un motor pe 2 timpi.' --utilizarea functiei CASE
+                WHEN MO.NR_TIMPI = 4 THEN 'Motocicleta are un motor pe 4 timpi.'
+            END 
+            )
+        FROM MOTOR MO
+        WHERE M.ID_MOTOR=MO.ID_MOTOR
+        )AS "NR_TIMPI"
+    FROM MOTOCICLETA M
+    ORDER BY M.KILOMETRAJ --ordonarea valorilor
+    )
+WHERE ROWNUM<=7;
+
+--Se respecta urmatoarele cerinte:
+
+--subcereri nesincronizate (una singura) în clauza FROM
+--ordonarea inregistrarilor
+--utilizarea a cel puțin unei expresii CASE
+
+--3. Pentru fiecare utilizator care a efectuat plati cu totalul sumei acestora mai mare decat media sumelor platilor celorlalti utilizatori, selectati suma 
+--totala a platilor facute cash, respectiv cu cardul. Se vor afisa numele complet al utilizatorului (intr-o coloana), cele doua sume  si suma care au platii 
+--în numerar si afisati numele si prenumele lor.
+
+WITH TABEL AS ( --utilizarea a cel puțin 1 bloc de cerere (clauza WITH)
+    SELECT --subcerere nesincronizata pt clauza FROM din cererea principala
+        P3.ID_UTILIZATOR AS "ID_UTILIZATOR", SUM(P3.COST) AS "SUMA" --functia grup SUM()
+    FROM PLATA P3
+    GROUP BY P3.ID_UTILIZATOR --grupari de date
+    )
+SELECT DISTINCT
+    (U.NUME||' '||U.PRENUME) AS "Numele complet", NVL(( --utilizarea functiei NVL()
+        SELECT
+            SUM(P1.COST) --functia grup SUM()
+        FROM PLATA P1
+        WHERE P1.ID_UTILIZATOR=P.ID_UTILIZATOR AND UPPER(P1.MODALITATE_PLATA)='CASH' --functia UPPER
+        ),0) AS "Suma totala cash", NVL((  ---utilizarea functiei NVL()
+        SELECT
+            SUM(P2.COST) --utilizarea functiei grup SUM()
+        FROM PLATA P2
+        WHERE P2.ID_UTILIZATOR=P.ID_UTILIZATOR AND UPPER(P2.MODALITATE_PLATA)='CARD' --utilizarea functiei CONCAT (pe siruri de caractere)
+        ),0) AS "Suma totala card"
+FROM PLATA P
+JOIN UTILIZATOR U ON U.ID_UTILIZATOR=P.ID_UTILIZATOR
+WHERE (
+        SELECT
+            T.SUMA
+        FROM TABEL T
+        WHERE T.ID_UTILIZATOR=U.ID_UTILIZATOR
+        )>(
+            SELECT
+                AVG(NVL(T1.SUMA,0)) --functia grup AVG si functia NVL
+            FROM TABEL T1
+            );
+
+--Se respecta urmatoarele cerinte:
+
+--utilizarea a cel puțin 1 bloc de cerere (clauza WITH)
+--utilizarea a unei funcții pe șiruri de caractere (UPPER)
+--ordonări si utilizarea funcției NVL (in cadrul aceleiasi cereri)
+--funcții grup, filtrare la nivel de grupuri (in cadrul aceleiasi cereri)
+--subcereri nesincronizate în clauza FROM
+
+--4. Pentru fiecare motocicleta a carei stare este cel putin buna (trebuie sa contina sirul 'buna') afisati id_ul acesteia, marca si modelul (intr-o singura 
+--coloana), starea, numele categoriei din care face parte si numarul de luni trecute de la ultima intretinere. Ordonati rezultatele crescator, dupa numele 
+--categoriei.
+
+--Solutie:
+SELECT
+    M.ID_MOTOCICLETA AS "Id-ul motocicletei", CONCAT(CONCAT(M.MARCA,' '),  --functia CONCAT
+    M.MODEL) AS "Marca si modelul", M.STARE AS "Starea", C.NUME AS "Numele categoriei", NVL((  --functia NVL
+    SELECT
+        MONTHS_BETWEEN(SYSDATE,(  --functia SYSDATE si MONTHS_BETWEEN
+            SELECT
+                MAX(I.DATA)   --functia grup MAX
+            FROM INTRETINERE I
+            WHERE I.ID_MOTOCICLETA=M.ID_MOTOCICLETA
+            ))
+    FROM DUAL
+    ),0) AS "Numarul de luni"
+FROM MOTOCICLETA M
+JOIN CATEGORIE C ON C.ID_CATEGORIE=M.ID_CATEGORIE
+WHERE INSTR(UPPER(M.STARE), 'BUNA')<>0 --functiile UPPER si INSTR
+ORDER BY C.NUME;
+
+--Se respecta cerintele:
+
+--utilizarea a cel puțin 2 funcții pe șiruri de caractere (UPPER, CONCAT, INSTR), 2 funcții pe date calendaristice (SYSDATE, MONTHS_NETWEEN)
+--ordonări si utilizarea funcției NVL
+
+--5.  Afisati numele si prenumele utilizatorilor care au înregistrate cel putin 2 motociclete în baza de date si au numarul motocicletelor, a caror motor 
+--foloseste benzina, mai mare decat media corespunzatoare celorlalti utilizatori . De asemenea, afisati varsta, numarul total de motociclete înregistrate, 
+--costul total al platilor efectuate si daca utilizatorul a efectuat sau nu operatii de întretinere. Rezultatele vor fi ordonate descrescator dupa numarul 
+--de motociclete si includ doar utilizatorii care îndeplinesc conditia de a avea cel putin 2 motociclete înregistrate.
+
+--Solutie:
+SELECT 
+    CONCAT(CONCAT(U.NUME,' '),U.PRENUME) AS NUME_COMPLET,  --functia CONCAT
+    COUNT(DISTINCT M.ID_MOTOCICLETA) AS NUMAR_MOTOCICLETE,  --functia grup COUNT
+    NVL(SUM(P.COST), 0) AS COST_TOTAL_PLATI,  --functia grup SUM si functia NVL
+    DECODE(COUNT(DISTINCT I.ID_INTRETINERE), 0, 'Nu', 'Da') AS "A efectuat intretinere" --functis grup COUNT si functia DECODE
+FROM UTILIZATOR U
+LEFT JOIN MOTOCICLETA M ON U.ID_UTILIZATOR=M.ID_UTILIZATOR
+LEFT JOIN PLATA P ON U.ID_UTILIZATOR = P.ID_UTILIZATOR
+LEFT JOIN INTRETINERE I ON M.ID_MOTOCICLETA = I.ID_MOTOCICLETA
+WHERE ( --subcerere sincronizata in care intervin cel putin 3 tabele
+    SELECT
+        COUNT(M2.ID_MOTOCICLETA)
+    FROM MOTOCICLETA M2
+    JOIN UTILIZATOR U2 ON U2.ID_UTILIZATOR=M2.ID_UTILIZATOR
+    JOIN MOTOR MT2 ON MT2.ID_MOTOR=M2.ID_MOTOR
+    JOIN CARBURANT C2 ON MT2.ID_CARBURANT=C2.ID_CARBURANT
+    WHERE UPPER(C2.TIP_COMBUSTIBIL)='BENZINA' AND U.ID_UTILIZATOR=U2.ID_UTILIZATOR)>=(
+    SELECT  --subcerere nesincronizata in care intervin cel putin 3 tabele
+        AVG(NVL(COUNT(M3.ID_MOTOCICLETA),0))
+    FROM MOTOCICLETA M3
+    JOIN UTILIZATOR U3 ON U3.ID_UTILIZATOR=M3.ID_UTILIZATOR
+    JOIN MOTOR MT3 ON MT3.ID_MOTOR=M3.ID_MOTOR
+    JOIN CARBURANT C3 ON MT3.ID_CARBURANT=C3.ID_CARBURANT
+    WHERE UPPER(C3.TIP_COMBUSTIBIL)='BENZINA'
+    GROUP BY U3.ID_UTILIZATOR
+    )
+GROUP BY U.ID_UTILIZATOR, U.NUME, U.PRENUME
+HAVING COUNT(DISTINCT M.ID_MOTOCICLETA)>=2 --functia grup COUNT
+ORDER BY NUMAR_MOTOCICLETE DESC; --ordonarea inregistrarilor
+
+--S-au respectat urmatoarele cerinte:
+
+--grupări de date cu subcereri nesincronizate in care intervin cel putin 3 tabele, funcții grup, filtrare la nivel de grupuri (in cadrul aceleiasi cereri)
+--ordonări si utilizarea funcțiilor NVL și DECODE (in cadrul aceleiasi cereri)
+--subcereri sincronizate în care intervin cel puțin 3 tabele
+
+--Exercitiul 13: Implementarea a 3opera?ii de actualizare ?i de suprimare a datelor utilizând subcereri.
+
+--1. Actualizarea coloanei "stare" din tabela MOTOCICLETA pentru motocicletele care apartin utilizatorilor cu vârsta mai mica de 25 de ani.
+
+UPDATE MOTOCICLETA
+SET stare = 'Noua'
+WHERE id_motocicleta IN (
+  SELECT id_motocicleta
+  FROM UTILIZATOR
+  WHERE varsta < 25
+);
+
+--2. Stergerea înregistrarilor din tabela UTILIZATOR pentru utilizatorii care detin motociclete cu un an de fabricatie mai mic de 2010.
+
+DELETE FROM UTILIZATOR
+WHERE id_utilizator IN (
+  SELECT id_utilizator
+  FROM MOTOCICLETA
+  WHERE an < 2010
+);
+
+--3. Actualizarea pozitiei frânei la 'Spate' pentru frânele asociate motocicletelor de marca 'Honda'. De asemenea, stergerea înregistrarilor de accesorii 
+--asociate motocicletelor de marca 'Yamaha'.
+
+UPDATE FRANA
+SET pozitie = 'Spate'
+WHERE id_frana IN (
+  SELECT id_frana
+  FROM FRANA_MOTOCICLETA
+  WHERE id_motocicleta IN (
+    SELECT id_motocicleta
+    FROM MOTOCICLETA
+    WHERE marca = 'Honda'
+  )
+);
+
+DELETE FROM ACCESORIU
+WHERE id_accesoriu IN (
+  SELECT id_accesoriu
+  FROM ACCESORII_MOTOCICLETE
+  WHERE id_motocicleta IN (
+    SELECT id_motocicleta
+    FROM MOTOCICLETA
+    WHERE marca = 'Yamaha'
+  )
+);
