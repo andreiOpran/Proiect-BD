@@ -1,4 +1,3 @@
-
 --12.Formulați în  limbaj  natural și  implementați 5 cereri  SQL  complexece  vor  utiliza,  în ansamblul lor, următoarele elemente:
 --•	subcereri sincronizate în care intervin cel puțin 3 tabele
 --•	subcereri nesincronizate în clauza FROM
@@ -165,3 +164,58 @@ COUNT(A.ID_ANGAJAT) >
     ) A1
 );
 
+
+
+-- 13. Implementarea a 3 operații de actualizare și de suprimare a datelor utilizând subcereri.
+
+-- APLICATI O REDUCERE DE 10% TUTOROR VEHICULELOR CARE AU MOTOR ELECTRIC
+UPDATE VEHICUL
+SET PRET = PRET * 0.9
+WHERE ID_VEHICUL IN
+(
+    SELECT
+        V.ID_VEHICUL
+    FROM VEHICUL V
+    WHERE V.ID_MOTOR IN
+    (
+        SELECT
+            ME.ID_MOTOR
+        FROM MOTOR_ELECTRIC ME
+    )
+);
+
+
+-- APLICATI O MARIRE DE SALARIU DE 10% ANGAJATILOR CARE AU EFECTUAT MAI MULTE DE O TRANZACTIE
+UPDATE ANGAJAT_SHOWROOM
+SET SALARIU = SALARIU * 1.1
+WHERE ID_ANGAJAT IN
+(
+        SELECT
+            A.ID_ANGAJAT
+        FROM ANGAJAT_SHOWROOM A
+        JOIN TRANZACTIE T ON A.ID_ANGAJAT = T.ID_ANGAJAT
+        GROUP BY A.ID_ANGAJAT
+        HAVING COUNT(T.ID_TRANZACTIE) > 1
+);
+
+-- STERGETI TOATE VEHICULELE DIN SHOWROOM-URI CARE FOLOSESC MOTORINA
+DELETE FROM VEHICUL
+WHERE ID_MOTOR IN
+(
+    SELECT
+        M.ID_MOTOR
+    FROM MOTOR M
+    WHERE M.ID_MOTOR IN
+    (
+        SELECT
+            MC.ID_MOTOR
+        FROM MOTOR_CARBURANT MC
+        WHERE MC.ID_CARBURANT IN
+        (
+            SELECT
+                C.ID_CARBURANT
+            FROM CARBURANT C
+            WHERE C.TIP = 'Motorina'
+        )
+    )
+);
