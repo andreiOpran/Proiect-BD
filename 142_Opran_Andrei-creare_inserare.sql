@@ -921,17 +921,3 @@ FROM SERVICE;
 
 COMMIT;
 
-
-SELECT
-    utc.column_name,
-    utc.data_type,
-    utc.nullable,
-    utc.data_default,
-    utc.column_id,
-    ucc.comments
-FROM
-    user_tab_columns utc
-LEFT JOIN
-    user_col_comments ucc ON ucc.table_name = utc.table_name AND ucc.column_name = utc.column_name
-WHERE
-    utc.table_name = 'CARBURANT';
